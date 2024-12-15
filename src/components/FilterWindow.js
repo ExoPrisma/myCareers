@@ -1,49 +1,44 @@
 import React, { useState } from "react";
-import "../styles/FilterWindow.css";
+import "./FilterWindow.css";
 
-const FilterWindow = () => {
-  const [formData, setFormData] = useState({
-    keywords: "",
-    term: "",
-    duration: [],
-    country: "",
-    province: "",
-    city: "",
-    format: [],
-    type: [],
-    features: [],
-    language: [],
-  });
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
+function FilterWindow ({ handleFilteringEvents, setIsActive  }) { 
+    const [formData, setFormData] = useState({
+        keywords: "",
+        title: "",
+        startDate: "",
+        endDate: "",
+        category: "", 
+        registered: "", 
+    });
 
-    if (type === "checkbox") {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: checked
-          ? [...prev[name], value]
-          : prev[name].filter((item) => item !== value),
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-  };
-
+    const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+    
+        if (type === "checkbox") {
+          setFormData((prev) => ({
+            ...prev,
+            [name]: checked,
+          }));
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+          }));
+        }
+      };
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log("Form Data:", formData);
-    // Add search logic here
+    handleFilteringEvents(formData); //passes form data so it can be applied to Events 
+    setIsActive(false); //makes form dissapear after submitting 
   };
 
   return (
     <div className="filter-container">
       <h2>Filter</h2>
       <h3>Job Specifications</h3>
-      <form onSubmit={handleSubmit} className="form">
+      <form onSubmit={handleSubmit}>
         <div className="form-group">
           <input
             type="text"
@@ -54,146 +49,71 @@ const FilterWindow = () => {
           />
         </div>
 
-        <div className="form-group term">
-          <label>Starting Term:</label>
-          <div className="el select-column">
-            <select
-              name="term"
-              value={formData.term}
-              onChange={handleInputChange}
-            >
-              <option value="">-Term-</option>
-              <option value="Winter">Winter</option>
-              <option value="Summer">Summer</option>
-              <option value="Fall">Fall</option>
-            </select>
-          </div>
+        <div className="group">
+          <input 
+            type="text"
+            name="title"
+            placeholder="Title"
+            value={formData.title}
+            onChange={handleInputChange}
+          />
         </div>
 
-        <div className="form-group duration">
-          <label>Duration:</label>
-          <div className="el checkbox-row">
-          {["4 Months", "6 Months", "12 Months"].map((duration) => (
-            <label key={duration}>
-              <input
-                type="checkbox"
-                name="duration"
-                value={duration}
+        <div className="form-group date-filter">
+          <label>Start Date:</label>
+          <input
+            type="date"
+            name="startDate"
+            value={formData.startDate}
+            onChange={handleInputChange}
+          />
+          <label>End Date:</label>
+          <input
+            type="date"
+            name="endDate"
+            value={formData.endDate}
+            onChange={handleInputChange}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Category:</label>
+          <select
+            name="category"
+            value={formData.category}
+            onChange={handleInputChange}
+          >
+            <option value="">-all Categories -</option>
+            <option value="Job Search">Job Search</option>
+            <option value="Companies">Companies</option>
+            <option value="Activities">Activities</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Registered:</label>
+          <div className="checkbox-row">
+            <input
+                type="radio"
+                name="registered"
+                value= "Yes"
+                checked={formData.registered === "Yes"}
                 onChange={handleInputChange}
-              />
-              {duration}
-            </label>
-          ))}
-          </div>
-        </div>
-
-        <div className="form-group location">
-          <label style={{ alignItems: "unset" }}>
-          Location:
-          </label>
-          <div className="el select-column">
-            <select
-              name="country"
-              value={formData.country}
-              onChange={handleInputChange}
-            >
-              <option value="">-Country-</option>
-              <option value="Canada">Canada</option>
-              <option value="USA">USA</option>
-            </select>
-            <select
-              name="province"
-              value={formData.province}
-              onChange={handleInputChange}
-            >
-              <option value="">-Province/State-</option>
-              <option value="Quebec">Quebec</option>
-              <option value="Ontario">Ontario</option>
-            </select>
-            <select
-              name="city"
-              value={formData.city}
-              onChange={handleInputChange}
-            >
-              <option value="">-City-</option>
-              <option value="Montreal">Montreal</option>
-              <option value="Toronto">Toronto</option>
-            </select> 
-          </div>
-        </div>
-
-        <div className="form-group format">
-          <label>Format:</label>
-          <div className="el checkbox-row">
-          {["Hybrid", "In Person", "Remote"].map((format) => (
-            <label key={format}>
-              <input
-                type="checkbox"
-                name="format"
-                value={format}
+            />
+            <label>Yes</label>
+            <input
+                type="radio"
+                name="registered"
+                value = "No"
+                checked={formData.registered === "No"}
                 onChange={handleInputChange}
-              />
-              {format}
-            </label>
-          ))}
+            />
+             <label>No</label>
           </div>
         </div>
-
-        <div className="form-group type">
-          <label>Type:</label>
-          <div className="el checkbox-row">
-          {["Full Time", "Part Time", "Contract"].map((type) => (
-            <label key={type}>
-              <input
-                type="checkbox"
-                name="type"
-                value={type}
-                onChange={handleInputChange}
-              />
-              {type}
-            </label>
-          ))}
-          </div>
-        </div>
-
-        <div className="form-group features">
-          <label>Features:</label>
-          <div className="el checkbox-row">
-          {["Starred", "Hidden"].map((feature) => (
-            <label key={feature}>
-              <input
-                type="checkbox"
-                name="features"
-                value={feature}
-                onChange={handleInputChange}
-              />
-              {feature}
-            </label>
-          ))}
-          </div>
-        </div>
-
-        <div className="form-group language">
-          <label>Language:</label>
-          <div className="el checkbox-row">
-          {["EN", "FR"].map((lang) => (
-            <label key={lang}>
-              <input
-                type="checkbox"
-                name="language"
-                value={lang}
-                onChange={handleInputChange}
-              />
-              {lang}
-            </label>
-          ))}
-          </div>
-        </div>
-
-        <button type="submit">Search</button>
+        <button type="submit">Search</button> 
       </form>
     </div>
   );
 };
-
 export default FilterWindow;
