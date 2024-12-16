@@ -1,64 +1,161 @@
-import React, { useState, useEffect } from 'react';
-import '../styles/MyProfile.css';
-import axios from 'axios';
-//import Postings from './Postings';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from "react";
+import axios from "axios";
+import {pdfjs } from "react-pdf";
+import "@react-pdf-viewer/core/lib/styles/index.css";
+import "react-pdf/dist/esm/Page/TextLayer.css";
+import "../styles/MyProfile.css";
+import UserPosting from "../components/UserPosting";
+import { useNavigate } from "react-router-dom";
+import "@react-pdf-viewer/core/lib/styles/index.css";
+import DocumentPreview from "../components/DocumentPreview";
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const MyProfile = () => {
+  const [personalInfo, setPersonalInfo] = useState({
+    fname: "",
+    lname: "",
+    id: "",
+    email: "",
+    faculty: "",
+    documents: [],
+    jobPostings: [],
+  });
 
-    const [selectedValue, setSelectedValue] = useState('');
+  const [personalInfoChanged, setPersonalInfoChanged] = useState(false); // Tracks if any input has changed
+  
+  const [activeDocument, setActiveDocument] = useState(null);
 
-    const handleStatusChange = (event) => {
-        setSelectedValue(event.target.value);
-    }
+  const [isDeletedApplication, setDeletedApplication] = useState(false);
+  const [isChanged, setIsChanged] = useState(false); // Tracks if any input has changed
+  const [postings, setPostings] = useState([])
 
-    const [personalInfo, setPersonalInfo] = useState({
-        fname: '',
-        lname: '',
-        id: '',
-        email: '',
-        faculty: '',
-        documents: [],
-        events: [],
-        jobPostings: []
+  const documentCounts = useMemo(() => {
+    const counts = {};
+    personalInfo.documents.forEach((doc) => {
+      counts[doc.category] = (counts[doc.category] || 0) + 1;
     });
+    return counts;
+  }, [personalInfo.documents]);
+  const fetchPersonalInfo = async () => {
+    try {
+      const response = await axios.get(
+        `http://localhost:8000/Users/${localStorage.getItem("id")}`
+      );
+      setPersonalInfo(response.data);
+    } catch (error) {
+      console.error("Error fetching personal info:", error);
+    }
+  };
+  useEffect(() => {
+    fetchPersonalInfo();
 
-    const [isChanged, setIsChanged] = useState(false); // Tracks if any input has changed
-
-    // Fetch student information on component mount
-    useEffect(() => {
-        const fetchPersonalInfo = async () => {
-            try {
-                const response = await axios.get(`http://localhost:8000/${localStorage.getItem("id")}`); 
-                setPersonalInfo(response.data);
-            } catch (error) {
-                console.error('Error fetching personal info:', error);
-            }
-        };
-        fetchPersonalInfo();
-    }, []);
-
-    // Handle input changes
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setPersonalInfo((prevInfo) => ({
-            ...prevInfo,
-            [name]: value,
-        }));
-        setIsChanged(true); // Show submit button
+    const fetchPersonalPostings = async () => {
+      try {
+        const response = await axios.get(
+          `http://localhost:8000/JobPostings`
+        );
+        setPostings(response.data);
+      } catch (error) {
+        console.error("Error fetching personal info:", error);
+      }
     };
+    fetchPersonalPostings();
+    
+  }, []);
 
-    // Submit updated info
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            await axios.put(`http://localhost:8000/Users/${localStorage.getItem("id")}`, personalInfo);
-            setIsChanged(false); // Hide submit button after successful update
-            alert('Information updated successfully!');
-        } catch (error) {
-            console.error('Error updating personal info:', error);
-        }
-    };
+
+  // const updatePersonalJobPostings = (updateFn) => {
+  //   setPersonalInfo((prev) => ({
+  //     ...prev,
+  //     jobPostings: updateFn(prev.jobPostings),
+  //   }));
+  // };
+
+  // Handle input changes
+  const handlePersonalInfoChange = (e) => {
+    const { name, value } = e.target;
+    setPersonalInfo((prevInfo) => ({
+      ...prevInfo,
+      [name]: value,
+    }));
+    setPersonalInfoChanged(true); // Show submit button
+  };
+
+  const handleFileChange = async (e, documentType) => {
+    const file = e.target.files[0];
+    
+    if (file) {
+      const formData = new FormData();
+      formData.append("document", file);
+      formData.append("category", documentType);
+  
+      try {
+        const response = await axios.post(
+          `http://localhost:8000/Users/${personalInfo._id}/documents`,
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+  
+        const updatedResponse = await axios.get(
+          `http://localhost:8000/Users/${localStorage.getItem("id")}`
+        );
+        setPersonalInfo(updatedResponse.data);
+        alert(`${documentType} uploaded successfully!`);
+      } catch (error) {
+        console.error("Error uploading the file:", error);
+        alert(`Error uploading ${documentType}`);
+      }
+    }
+  };
+  
+  
+  const showPdf = async (docType) => {
+    const filteredDocuments = personalInfo.documents.filter(
+      (doc) => doc.category === docType
+    );
+
+    try {
+      const documentsPromises = filteredDocuments.map(async (doc) => {
+        const response = await axios.get(
+          `http://localhost:8000/Users/${personalInfo._id}/documents/${doc.id}`,
+          { responseType: "blob" }
+        );
+        const fileUrl = URL.createObjectURL(response.data);
+        return { category: doc.category, fileUrl };
+      });
+      const documentsWithUrls = await Promise.all(documentsPromises);
+      setActiveDocument(documentsWithUrls);
+    } catch (error) {
+      console.error("Error loading PDF:", error);
+      alert("Error retrieving the document.");
+    }
+  };
+  const closeDocuments = () => {
+    setActiveDocument(null);
+  };
+
+  
+
+
+
+  // Submit updated info
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      console.log(personalInfo);
+      await axios.put(
+        `http://localhost:8000/Users/${personalInfo._id}`,
+        personalInfo
+      );
+      setPersonalInfoChanged(false); // Hide submit button after successful update
+      alert("Information updated successfully!");
+    } catch (error) {
+      console.error("Error updating personal info:", error);
+    }
+  };
 
     const navigate = useNavigate();
     const goToPostings = () => {
@@ -76,33 +173,63 @@ const MyProfile = () => {
                     <ul>
                         <li>
                             <span className="doc-type">Cover Letter</span>
-                            <span className="count">0</span>
-                            <button type="button" className="view-button">View</button>
-                            <button type="button" className="add-button">+</button>
+                            <span className="count">{documentCounts["Cover Letter"] || 0}</span>
+                            <button type="button" className="view-button" onClick={() => showPdf("Cover Letter")}>View</button>
+                            <button type="button" className="add-button" onClick={()=> document.getElementById("file-upload-cov-letter").click()}>+</button>                            <input
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFileChange(e, "Cover Letter")}
+                  id={`file-upload-cov-letter`}
+                />
                         </li>
                         <li>
                             <span className="doc-type">CV/Resume</span>
-                            <span className="count">0</span>
-                            <button type="button" className="view-button">View</button>
-                            <button type="button" className="add-button">+</button>
+                            <span className="count">{documentCounts["CV"] || 0}</span>
+                            <button type="button" className="view-button" onClick={() => showPdf("CV")}>View</button>
+                            <button type="button" className="add-button" onClick={()=> document.getElementById("file-upload-cv").click()}>+</button>                            
+                <input
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFileChange(e, "CV")}
+                  id={`file-upload-cv`}
+                />
                         </li>
                         <li>
                             <span className="doc-type">Unofficial Transcript</span>
-                            <span className="count">0</span>
-                            <button type="button" className="view-button">View</button>
-                            <button type="button" className="add-button">+</button>
+                            <span className="count">{documentCounts["Transcript"] || 0}</span>
+                            <button type="button" className="view-button" onClick={() => showPdf("Transcript")}>View</button>
+                            <button type="button" className="add-button" onClick={()=> document.getElementById("file-upload-transcript").click()}>+</button>                            
+                            <input
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFileChange(e, "Transcript")}
+                  id={`file-upload-transcript`}
+                />
                         </li>
                         <li>
-                            <span className="doc-type">Recommendation Letter</span>
-                            <span className="count">0</span>
-                            <button type="button" className="view-button">View</button>
-                            <button type="button" className="add-button">+</button>
+                            <span className="doc-type">Recommandation Letter</span>
+                            <span className="count">{documentCounts["Recommandation Letter"] || 0}</span>
+                            <button type="button" className="view-button" onClick={() => showPdf("Recommandation Letter")}>View</button>
+                            <button type="button" className="add-button" onClick={()=> document.getElementById("file-upload-rec-letter").click()}>+</button>
+                                                        <input
+                            
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFileChange(e, "Recommandation Letter")}
+                  id={`file-upload-rec-letter`}
+                />
                         </li>
                         <li>
                             <span className="doc-type">Other</span>
-                            <span className="count">0</span>
-                            <button type="button" className="view-button">View</button>
-                            <button type="button" className="add-button">+</button>
+                            <span className="count">{documentCounts["Others"] || 0}</span>
+                            <button type="button" className="view-button" onClick={() => showPdf("Others")}>View</button>
+                            <button type="button" className="add-button" onClick={()=> document.getElementById("file-upload-other").click()}>+</button>
+                            <input
+                  type="file"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFileChange(e, "Others")}
+                  id={`file-upload-other`}
+                />
                         </li>
                         <li>
                             <span className="doc-type">Templates</span>
@@ -112,90 +239,107 @@ const MyProfile = () => {
                 </div>
             </div> 
 
-              
-
-            <div className="container" id="personal-info">
-                <div className="types-personal-info">
-                    <h2>Personal Info</h2>
-                    <form onSubmit={handleSubmit}>
-                        <div class="col">
-                            <label for="fname">First Name:</label>
-                            <input type='text' name="fname" id="fname" value={personalInfo.fname} onChange={handleChange}></input>
-                        </div>
-                        <div class="col">
-                            <label for="lname">Last Name:</label>
-                            <input type='text' name="lname" id="lname" value={personalInfo.lname} onChange={handleChange}></input>
-                        </div>
-                        <div class="col">
-                            <label for="id">Student ID:</label>
-                            <input type='text' name="id" id="id" value={personalInfo.id} onChange={handleChange}></input>
-                        </div>
-                        <div class="col">
-                            <label for="email">Email:</label>
-                            <input type='text' name="email" id="email" value={personalInfo.email} onChange={handleChange}></input>
-                        </div>
-                        <div class="col">
-
-                            <label for="faculty">Student ID:</label>
-                            <input type='text' name="faculty" id="faculty" value={personalInfo.faculty} onChange={handleChange}></input>
-                        </div>
-                        {isChanged && <input type="submit" value="Submit" />}
-                    </form>
-                    {/*
-                    <ul>
-                        <li>
-                            First Name:
-                        </li>
-                        <li>
-                            Last Name:
-                        </li>
-                        <li>
-                            Student ID:
-                        </li>
-                        <li>
-                            Email:
-                        </li>
-                        <li>
-                            Faculty:
-                        </li>
-                    </ul>
-                </div>
-                <div className="form-personal-info">
-                    <input type="text"></input><br/>
-                    <input type="text"></input><br/>
-                    <input type="text"></input><br/>
-                    <input type="text"></input><br/>
-                    <input type="text"></input><br/>
-                </div>
-                */}
-                </div>
+      <div className="container" id="personal-info">
+        <div className="types-personal-info">
+          <h2>Personal Info</h2>
+          <form className="form-container" onSubmit={handleSubmit}>
+            <div className="col">
+              <label for="fname">First Name:</label>
+              <input 
+                className="exclude-style"
+                type="text"
+                name="fname"
+                id="fname"
+                value={personalInfo.fname}
+                onChange={handlePersonalInfoChange}
+              ></input>
             </div>
-            
-            <div className="container" id="applications">
-                <div className="applications-content">
-                    <h2>Applications Status Board</h2>
-                    <ul>
-                        <li>
-                            <span className='application-title'> Software Development Intern Position at X</span>
-                            <select value={selectedValue} onChange={handleStatusChange}>
-                                <option value='' className="white">Set Status</option>
-                                <option value='in-progress' className="white">In Progress</option>
-                                <option value='pending' className="white">Pending</option>
-                                <option value='accepted' className="white">Accepted</option>
-                                <option value='rejected' className="white">Rejected</option>
-                            </select>
-                            <i className="bi bi-trash"></i>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash"  style={{ cursor: 'pointer' }}  viewBox="0 0 16 16">
-                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
-                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
-                            </svg>
-                        </li>
-                    </ul>
-                    <button type="button" className="search-more-button" onClick={goToPostings}>Search More</button>
-                </div>
+            <div className="col">
+              <label for="lname">Last Name:</label>
+              <input
+                className="exclude-style"
+                type="text"
+                name="lname"
+                id="lname"
+                value={personalInfo.lname}
+                onChange={handlePersonalInfoChange}
+              ></input>
             </div>
-       </div>
-    );
+            <div className="col">
+              <label for="id">Student ID:</label>
+              <input
+                className="exclude-style"
+                type="text"
+                name="id"
+                id="id"
+                value={personalInfo.id}
+                onChange={handlePersonalInfoChange}
+              ></input>
+            </div>
+            <div className="col">
+              <label for="email">Email:</label>
+              <input
+                className="exclude-style"
+                type="text"
+                name="email"
+                id="email"
+                value={personalInfo.email}
+                onChange={handlePersonalInfoChange}
+              ></input>
+            </div>
+            <div className="col">
+              <label for="faculty">Faculty:</label>
+              <input
+                className="exclude-style"
+                type="text"
+                name="faculty"
+                id="faculty"
+                value={personalInfo.faculty}
+                onChange={handlePersonalInfoChange}
+              ></input>
+            </div>
+            {personalInfoChanged && 
+            (
+              <div className="submit-container">
+                <input type="submit" value="Submit" className="personal-info-submit"/>
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+
+        <div className="container" id="applications">
+          <div className="applications-content">
+            <h2>Applications Status Board</h2>
+            <ul>
+                {personalInfo?.jobPostings?.map((jobPosting, index) => 
+              <UserPosting
+              key={index}
+              jobPosting={jobPosting}
+              postings={postings}
+              updatePersonalInfo={fetchPersonalInfo} 
+            />
+                )}
+            </ul>
+            <button
+              type="button"
+              className="search-more-button"
+              onClick={goToPostings}
+            >
+              Search More
+            </button>
+          </div>
+        </div>
+          {activeDocument?.length > 0 && (
+            <>
+            <div className="overlay">
+
+                <DocumentPreview  documents={activeDocument} onDocumentClose={closeDocuments}></DocumentPreview>
+            </div>
+            </>
+          )}
+        </div>
+  );
 };
 
 export default MyProfile;

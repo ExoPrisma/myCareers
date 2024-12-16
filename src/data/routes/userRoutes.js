@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const bcrypt = require("bcrypt");
 const upload = require('../utils/upload'); 
 const express = require('express');
 const User = require('../models/User');
@@ -61,6 +62,71 @@ router.post("/", async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+});
+
+router.post("/login", (req, res) => {
+  const { email, password } = req.body;
+
+  // Check if the user exists
+  User.findOne({ email: email })
+      .then(user => {
+          if (!user) {
+              return res.status(404).json({ message: "No record exists" });
+          }
+
+          // Compare hashed password
+          bcrypt.compare(password, user.password, (err, isMatch) => {
+              if (err) {
+                  console.error(err);
+                  return res.status(500).json({ message: "Internal server error" });
+              }
+
+              if (isMatch) {
+                  res.status(200).json({ message: "Success", id:user._id });
+              } else {
+                  res.status(401).json({ message: "Password is wrong" });
+              }
+          });
+      })
+      .catch(err => {
+          console.error('Error during login:', err);
+          res.status(500).json({ message: "Internal server error" });
+      });
+});
+
+// User signin
+router.post('/signin', (req, res) => {
+  const { email, password } = req.body;
+
+  // Check if the user already exists
+  User.findOne({ email: email })
+      .then(existingUser => {
+          if (existingUser) {
+              return res.status(409).json({ message: "User already exists" });
+          }
+
+          // Hash the password before storing it in the database
+          bcrypt.hash(password, 10, (err, hashedPassword) => {
+              if (err) {
+                  console.error('Error hashing password:', err);
+                  return res.status(500).json({ message: "Internal server error" });
+              }
+
+              // Create the new user with the hashed password
+              User.create({ email, password: hashedPassword })
+                  .then(newUser => {
+                      res.status(201).json({ message: "User created successfully", user: newUser });
+                  })
+                  .catch(err => {
+                      console.error('Error during user creation:', err);
+                      res.status(500).json({ message: "Error creating user" });
+                  });
+          });
+      })
+      .catch(err => {
+          console.error('Error during signin:', err);
+          res.status(500).json({ message: "Internal server error" });
+      });
 });
 
 /**
@@ -398,6 +464,54 @@ router.put("/:id/jobPostings/:jobPostingId", async (req, res) => {
 });
 
 /**
+ * @description Update the status of a specific application for a user
+ * @route PUT /Users/:id/jobPostings/:jobPostingId/status
+ * @param {string} id - User ID
+ * @param {string} jobPostingId - Job Posting ID
+ * @body {string} status - New status value (e.g., "Pending", "Approved")
+ * @response 200 {jobPostingId, status, star}
+ * @response 404 {error: "User or job posting not found"}
+ * @response 400 {error: "Invalid or missing 'status' field"}
+ */
+router.put("/:id/jobPostings/:jobPostingId/status", async (req, res) => {
+  try {
+    const { id, jobPostingId } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ["None", "Pending", "In Progress", "Approved", "Rejected"];
+  
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid or missing 'status' field. Valid values are: ${validStatuses.join(", ")}`
+      });
+    }
+  
+    const user = await User.findOneAndUpdate(
+      { _id: id, "jobPostings.jobPostingId": jobPostingId },
+      { $set: { "jobPostings.$.status": status } },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "User or job posting not found" });
+    }
+
+    const updatedJobPosting = user.jobPostings.find(
+      (posting) => posting.jobPostingId.toString() === jobPostingId
+    );
+
+    res.status(200).json({
+      jobPostingId: updatedJobPosting.jobPostingId,
+      status: updatedJobPosting.status,
+      star: updatedJobPosting.star
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+
+/**
  * @description Delete user by id (Also deletes its directory)
  * @route DELETE /Users/:id
  * @param {string} id - User ID
@@ -524,7 +638,7 @@ router.delete("/:userId/jobPostings/:jobPostingId", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const postingIndex = user.jobPostings.findIndex((posting) => posting.jobPostingId === jobPostingId);
+    const postingIndex = user.jobPostings.findIndex((posting) => posting.jobPostingId.toString() === jobPostingId);
 
     if (postingIndex === -1) {
       return res.status(404).json({ error: "Job posting not found" });
